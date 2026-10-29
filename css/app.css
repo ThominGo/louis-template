@@ -38,8 +38,7 @@ button, input, textarea { font: inherit; color: inherit; }
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: -0.01em; margin-right: auto; white-space: nowrap; }
-.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--orange); }
+.bar .export { margin-left: auto; }
 
 .seg { display: inline-flex; background: var(--raise); border-radius: 999px; padding: 3px; gap: 2px; }
 .seg button {

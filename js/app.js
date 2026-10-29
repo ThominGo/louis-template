@@ -91,7 +91,7 @@ function setMedia(blob, { sample = false, persist = true } = {}) {
     const old = state.media.el;
     if (old instanceof HTMLVideoElement) { old.pause(); old.removeAttribute('src'); old.load(); }
     const done = (el) => {
-      Object.assign(state.media, { el, type: isVideo ? 'video' : 'image', ox: 0, oy: 0, zoom: 1, sample });
+      Object.assign(state.media, { el, blob, type: isVideo ? 'video' : 'image', ox: 0, oy: 0, zoom: 1, sample });
       $('zoom').value = 1;
       updateMediaUI();
       dirty = true; thumbsLater();
@@ -391,8 +391,9 @@ async function exportImage() {
   const keepHits = env.hits.slice();
   draw(out.getContext('2d'), false);
   env.hits.splice(0, env.hits.length, ...keepHits);
-  const blob = await new Promise(r => out.toBlob(r, 'image/png'));
-  await deliver(blob, fileName('png'));
+  // JPEG haute qualité : bien plus rapide à encoder que le PNG sur téléphone, et Instagram recompresse de toute façon
+  const blob = await new Promise(r => out.toBlob(r, 'image/jpeg', 0.95));
+  await deliver(blob, fileName('jpg'));
 }
 
 let audio = null;
@@ -413,7 +414,7 @@ function pickMime() {
 }
 
 let recorder = null;
-async function exportVideo() {
+async function exportVideoRealtime() {
   const v = state.media.el;
   if (!window.MediaRecorder || !canvas.captureStream) { toast("L'export vidéo n'est pas disponible sur ce navigateur. Utilise Safari ou Chrome à jour."); return; }
   const out = document.createElement('canvas');
@@ -428,7 +429,7 @@ async function exportVideo() {
   recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 10e6 } : { videoBitsPerSecond: 10e6 });
   recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
   let cancelled = false, raf = 0;
-  const dur = Math.min(v.duration || 60, 90);
+  const dur = Math.min(v.duration || MAX_SECONDS, MAX_SECONDS);
   const ui = (txt, p) => { $('overlayText').textContent = txt; $('progressBar').style.width = Math.round(p * 100) + '%'; };
   $('overlay').hidden = false;
   ui('Lecture de la vidéo en temps réel. Garde l’app ouverte.', 0);
@@ -458,6 +459,83 @@ async function exportVideo() {
   const ext = type.includes('mp4') ? 'mp4' : 'webm';
   await deliver(new Blob(chunks, { type }), fileName(ext));
   if (ext === 'webm') toast('Vidéo en .webm : convertis-la en .mp4 avant de la publier.');
+}
+
+// Export rapide : décode la vidéo image par image (WebCodecs), dessine le template,
+// réencode en MP4 et recopie le son sans le réencoder. Bien plus rapide que le temps réel.
+const MAX_SECONDS = 90;
+const CODEC = window.__exportCodec || 'avc'; // H.264, le format accepté partout par Instagram
+let MB = null;
+async function exportVideoFast() {
+  if (!('VideoEncoder' in window) || !('VideoDecoder' in window) || !state.media.blob) return false;
+  MB = MB || await import('./vendor/mediabunny.min.mjs');
+  const { Input, ALL_FORMATS, BlobSource, Output, Mp4OutputFormat, BufferTarget, Conversion, QUALITY_HIGH, canEncodeVideo } = MB;
+  const H = HEIGHT[state.format];
+  if (!(await canEncodeVideo(CODEC, { width: W, height: H }).catch(() => false))) return false;
+
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const octx = out.getContext('2d');
+  const frameCanvas = document.createElement('canvas');
+  const fctx = frameCanvas.getContext('2d');
+  const keepEl = state.media.el;
+  const keepHits = env.hits.slice();
+  const v = state.media.el;
+  const dur = Math.min(v.duration || MAX_SECONDS, MAX_SECONDS);
+
+  const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(state.media.blob) });
+  const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target: new BufferTarget() });
+  let conv;
+  try {
+    conv = await Conversion.init({
+      input, output, showWarnings: false,
+      trim: { start: 0, end: dur },
+      video: {
+        codec: CODEC, quality: QUALITY_HIGH, forceTranscode: true,
+        processedWidth: W, processedHeight: H,
+        process: (sample) => {
+          const sw = sample.displayWidth, sh = sample.displayHeight;
+          if (frameCanvas.width !== sw || frameCanvas.height !== sh) { frameCanvas.width = sw; frameCanvas.height = sh; }
+          sample.draw(fctx, 0, 0, sw, sh);
+          state.media.el = frameCanvas;
+          draw(octx, false);
+          state.media.el = keepEl;
+          return out;
+        },
+      },
+    });
+  } catch (e) { return false; }
+  if (!conv.isValid) return false;
+
+  const ui = (txt, p) => { $('overlayText').textContent = txt; $('progressBar').style.width = Math.round(p * 100) + '%'; };
+  let cancelled = false;
+  $('overlay').hidden = false;
+  ui('Préparation…', 0);
+  $('cancelExport').onclick = () => { cancelled = true; conv.cancel?.(); };
+  conv.onProgress = (p) => ui(`Export : ${Math.round(p * 100)} %`, p);
+  v.pause();
+  try {
+    await conv.execute();
+  } catch (e) {
+    state.media.el = keepEl;
+    env.hits.splice(0, env.hits.length, ...keepHits);
+    $('overlay').hidden = true;
+    if (cancelled) { toast('Export annulé'); return true; }
+    return false;
+  }
+  state.media.el = keepEl;
+  env.hits.splice(0, env.hits.length, ...keepHits);
+  $('overlay').hidden = true;
+  updateMediaUI(); dirty = true;
+  if (cancelled) { toast('Export annulé'); return true; }
+  await deliver(new Blob([output.target.buffer], { type: 'video/mp4' }), fileName('mp4'));
+  return true;
+}
+
+async function exportVideo() {
+  let done = false;
+  try { done = await exportVideoFast(); } catch (e) { done = false; }
+  if (!done) await exportVideoRealtime();
 }
 
 $('exportBtn').addEventListener('click', async () => {
