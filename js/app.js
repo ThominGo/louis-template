@@ -21,6 +21,7 @@ const state = {
   media: { el: null, type: null, sample: false },
   crops: {},       // cadrage du média propre à chaque template et format
   igPreview: true, // interface Instagram par-dessus les stories
+  flip: {},        // texte en haut ou en bas, par template
 };
 
 function load() {
@@ -32,6 +33,7 @@ function load() {
       Object.assign(state.data, s.data || {});
       state.fx = s.fx || {};
       state.crops = s.crops || {};
+      state.flip = s.flip || {};
       if (typeof s.igPreview === 'boolean') state.igPreview = s.igPreview;
     }
   } catch (e) { /* stockage indisponible : on garde les valeurs d'exemple */ }
@@ -40,7 +42,7 @@ let saveTimer = 0;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ tpl: state.tpl, format: state.format, data: state.data, fx: state.fx, crops: state.crops, igPreview: state.igPreview })); } catch (e) {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ tpl: state.tpl, format: state.format, data: state.data, fx: state.fx, crops: state.crops, flip: state.flip, igPreview: state.igPreview })); } catch (e) {}
   }, 300);
 }
 
@@ -138,7 +140,7 @@ function draw(target = ctx, editing = true) {
   env.editing = editing;
   env.light = ['texte-image', 'texte-image-desc', 'texte-video'].includes(t.id);
   env.crop = cropFor(t.id);
-  render(target, t, state.format, { ...state.data, ronds: state.data.ronds && !!t.ronds }, env);
+  render(target, t, state.format, { ...state.data, ronds: state.data.ronds && !!t.ronds, flip: !!state.flip[t.id] }, env);
   // aperçu uniquement : jamais dans les fichiers exportés
   if (editing && target === ctx && state.format === 'story' && state.igPreview) drawInstaStory(target, W, HEIGHT.story);
 }
@@ -177,7 +179,7 @@ function drawThumbs() {
     tmpEnv.light = ['texte-image', 'texte-image-desc', 'texte-video'].includes(t.id);
     tmpEnv.editing = false;
     tmpEnv.crop = cropFor(t.id);
-    render(thumbCtx, t, state.format, { ...state.data, ronds: state.data.ronds && !!t.ronds }, tmpEnv);
+    render(thumbCtx, t, state.format, { ...state.data, ronds: state.data.ronds && !!t.ronds, flip: !!state.flip[t.id] }, tmpEnv);
     const cx = c.getContext('2d');
     cx.imageSmoothingQuality = 'high';
     cx.drawImage(thumbCanvas, 0, 0, c.width, c.height);
@@ -228,7 +230,9 @@ function updateMediaUI() {
   const t = tpl();
   $('mediaBlock').hidden = !t.media;
   $('fxBlock').hidden = !t.media;
-  $('optBlock').hidden = !t.ronds;
+  $('optBlock').hidden = !t.ronds && !t.flip;
+  $('flipBtn').hidden = !t.flip;
+  $('rondsRow').hidden = !t.ronds;
   $('ronds').checked = !!state.data.ronds;
   const isVideo = state.media.type === 'video';
   $('playBtn').hidden = !isVideo;
@@ -276,6 +280,7 @@ document.querySelectorAll('#fxSeg button').forEach(b => b.addEventListener('clic
 });
 $('igPreview').checked = state.igPreview;
 $('igPreview').addEventListener('change', (e) => { state.igPreview = e.target.checked; dirty = true; save(); });
+$('flipBtn').addEventListener('click', () => { state.flip[state.tpl] = !state.flip[state.tpl]; dirty = true; save(); thumbsLater(); });
 $('ronds').addEventListener('change', (e) => { state.data.ronds = e.target.checked; dirty = true; save(); thumbsLater(); });
 $('zoom').addEventListener('input', (e) => { cropFor().zoom = +e.target.value; updateMediaUI(); dirty = true; save(); thumbsLater(); });
 $('recenter').addEventListener('click', () => { Object.assign(cropFor(), { ox: 0, oy: 0, zoom: 1 }); $('zoom').value = 1; updateMediaUI(); dirty = true; save(); thumbsLater(); });

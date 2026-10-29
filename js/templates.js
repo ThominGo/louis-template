@@ -176,38 +176,67 @@ function titleRows(ctx, text, size, rowH, maxW) {
   return { lines, size: s, rowH: rowH * (s / size) };
 }
 
+// Marges de sécurité des stories : zones couvertes par l'interface Instagram
+export const SAFE = { top: 200, bottom: 250 };
+
+// Bloc titre en rangées (+ rangée date | lieu), dessiné à partir de y. Renvoie la hauteur.
+function titleBlockHeight(T, dateRow) {
+  return LW + T.lines.length * (T.rowH + LW) + (dateRow ? 75 + LW : 0);
+}
+function drawTitleBlock(ctx, y, T, d, env, dateRow) {
+  const start = y;
+  hline(ctx, 0, W, y, C.black); y += LW;
+  const tTop = y;
+  T.lines.forEach((line) => {
+    drawLines(ctx, [line], { x: 0, y, w: W, size: T.size, lh: 1.2, color: C.black, align: 'center' });
+    y += T.rowH;
+    hline(ctx, 0, W, y, C.black); y += LW;
+  });
+  field(env, 'titre', 0, tTop, W, y - tTop);
+  if (dateRow) {
+    drawLines(ctx, [d.date], { x: 40, y: y + 16, w: 499, size: 36, lh: 1.2, weight: 500, color: C.black, align: 'center' });
+    drawLines(ctx, [d.lieu], { x: 541, y: y + 16, w: 499, size: 36, lh: 1.2, weight: 500, color: C.black, align: 'center' });
+    vline(ctx, 539, y, y + 75, C.black);
+    field(env, 'date', 0, y, 539, 75);
+    field(env, 'lieu', 541, y, 539, 75);
+    y += 75;
+    hline(ctx, 0, W, y, C.black); y += LW;
+  }
+  return y - start;
+}
+
+// Templates empilés : titre en rangées d'un côté, média de l'autre.
+// textTop indique si le texte est en haut ; "inverser" bascule le côté.
+function stacked(ctx, H, d, env, o) {
+  const story = H > 1350;
+  ctx.fillStyle = C.white; ctx.fillRect(0, 0, W, H);
+  const size = story ? o.storySize : o.size, rowH = story ? o.storyRowH : o.rowH;
+  const T = titleRows(ctx, d.titre, size, rowH, W - 80);
+  const textTop = d.flip ? !o.textTop : o.textTop;
+  const bh = titleBlockHeight(T, o.dateRow);
+  let m, blockY;
+  if (textTop) {
+    blockY = story ? SAFE.top : 0;
+    m = { x: 0, y: blockY + bh, w: W, h: H - blockY - bh };
+  } else {
+    const bottom = story ? SAFE.bottom : 0;
+    blockY = H - bottom - bh + (story ? 0 : LW);
+    m = { x: 0, y: 0, w: W, h: blockY };
+  }
+  drawMedia(ctx, m, env);
+  drawTitleBlock(ctx, blockY, T, d, env, o.dateRow);
+  if (d.ronds) {
+    const D = story ? o.storyDisc : o.disc;
+    const p = textTop ? (story ? [0.27, 0.42] : [0, 0.49]) : (story ? [0.36, 0.83] : [0.34, 0.79]);
+    disc(ctx, W, m.y + m.h * p[0], D, C.orange);
+    disc(ctx, 0, m.y + m.h * p[1], D, C.orange);
+    disc(ctx, W, textTop ? H : blockY + bh, D, C.orange);
+  }
+}
+
 // 2. post-text-image : titre centré en rangées, date | lieu, photo dessous, ronds orange
 function texteImage(ctx, H, d, env) {
-  const story = H > 1350;
-  const top = story ? 200 : 0;
-  ctx.fillStyle = C.white; ctx.fillRect(0, 0, W, H);
-  const T = titleRows(ctx, d.titre, 80, 96, W - 80);
-  let y = top;
-  if (story) hline(ctx, 0, W, y, C.black);
-  const titleTop = y;
-  T.lines.forEach((line, i) => {
-    drawLines(ctx, [line], { x: 0, y: y + LW, w: W, size: T.size, lh: 1.2, color: C.black, align: 'center' });
-    y += T.rowH + LW;
-    hline(ctx, 0, W, y - LW, C.black);
-  });
-  field(env, 'titre', 0, titleTop, W, y - titleTop);
-  const rowH = 75;
-  drawLines(ctx, [d.date], { x: 40, y: y + 16, w: 499, size: 36, lh: 1.2, weight: 500, color: C.black, align: 'center' });
-  drawLines(ctx, [d.lieu], { x: 541, y: y + 16, w: 499, size: 36, lh: 1.2, weight: 500, color: C.black, align: 'center' });
-  vline(ctx, 539, y, y + rowH, C.black);
-  field(env, 'date', 0, y, 539, rowH);
-  field(env, 'lieu', 541, y, 539, rowH);
-  y += rowH;
-  hline(ctx, 0, W, y, C.black);
-  y += LW;
-  const m = { x: 0, y, w: W, h: H - y };
-  drawMedia(ctx, m, env);
-  if (d.ronds) {
-    const p = story ? [0.27, 0.42] : [0, 0.49];
-    disc(ctx, W, m.y + m.h * p[0], 240, C.orange);
-    disc(ctx, 0, m.y + m.h * p[1], 240, C.orange);
-    disc(ctx, W, H, 240, C.orange);
-  }
+  stacked(ctx, H, d, env, { textTop: true, dateRow: true, size: 80, rowH: 96, storySize: 80, storyRowH: 96, disc: 240, storyDisc: 240 });
 }
 
 // Bloc encadré commun aux templates "description"
@@ -282,30 +311,7 @@ function texteDesc(ctx, H, d, env) {
 
 // 5. post-text-video : vidéo en haut, titre en rangées en bas
 function texteVideo(ctx, H, d, env) {
-  const story = H > 1350;
-  ctx.fillStyle = C.white; ctx.fillRect(0, 0, W, H);
-  const size = story ? 95 : 80, rowH = story ? 114 : 96;
-  const T = titleRows(ctx, d.titre, size, rowH, W - 80);
-  const block = T.lines.length * (T.rowH + LW);
-  const m = { x: 0, y: 0, w: W, h: H - block - LW };
-  drawMedia(ctx, m, env);
-  let y = m.h;
-  hline(ctx, 0, W, y, C.black);
-  y += LW;
-  field(env, 'titre', 0, y, W, H - y);
-  T.lines.forEach(line => {
-    drawLines(ctx, [line], { x: 0, y, w: W, size: T.size, lh: 1.2, color: C.black, align: 'center' });
-    y += T.rowH;
-    hline(ctx, 0, W, y, C.black);
-    y += LW;
-  });
-  if (d.ronds) {
-    const p = story ? [0.36, 0.83] : [0.34, 0.79];
-    const D = story ? 286 : 240;
-    disc(ctx, W, m.h * p[0], D, C.orange);
-    disc(ctx, 0, m.h * p[1], D, C.orange);
-    disc(ctx, W, H, D, C.orange);
-  }
+  stacked(ctx, H, d, env, { textTop: false, dateRow: false, size: 80, rowH: 96, storySize: 95, storyRowH: 114, disc: 240, storyDisc: 286 });
 }
 
 // 6-8. médias seuls, avec repères
@@ -332,10 +338,10 @@ function mediaPlein(ctx, H, d, env) {
 
 export const TEMPLATES = [
   { id: 'texte', name: 'Annonce', draw: texte, fields: ['titre', 'date', 'lieu'], media: false },
-  { id: 'texte-image', name: 'Concert photo', draw: texteImage, fields: ['titre', 'date', 'lieu'], media: true, ronds: true },
+  { id: 'texte-image', name: 'Concert photo', draw: texteImage, fields: ['titre', 'date', 'lieu'], media: true, ronds: true, flip: true },
   { id: 'texte-image-desc', name: 'Concert détaillé', draw: texteImageDesc, fields: ['titre', 'date', 'lieu', 'description'], media: true, ronds: true },
   { id: 'texte-desc', name: 'Événement texte', draw: texteDesc, fields: ['titre', 'date', 'lieu', 'description'], media: false },
-  { id: 'texte-video', name: 'Morceau', draw: texteVideo, fields: ['titre'], media: true, ronds: true },
+  { id: 'texte-video', name: 'Morceau', draw: texteVideo, fields: ['titre'], media: true, ronds: true, flip: true },
   { id: 'media', name: 'Cadre portrait', draw: mediaPortrait, fields: [], media: true, fx: 'bwOrange' },
   { id: 'media-169', name: 'Cadre 16:9', draw: mediaPaysage, fields: [], media: true, fx: 'bwOrange' },
   { id: 'media-plein', name: 'Plein cadre', draw: mediaPlein, fields: [], media: true },
