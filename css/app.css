@@ -76,29 +76,13 @@ button, input, textarea { font: inherit; color: inherit; }
 .frame.story { width: min(100%, calc(56vh * 1080 / 1920)); aspect-ratio: 1080 / 1920; }
 .frame canvas { display: block; width: 100%; height: 100%; }
 .check.ig { font-size: 14px; color: var(--muted); min-height: 28px; }
-/* Aperçu réduit qui reste visible quand on descend dans les réglages (mobile) */
-.mini {
-  position: fixed; left: 0; right: 0; top: 0; z-index: 15;
-  display: flex; justify-content: center;
-  padding: calc(env(safe-area-inset-top, 0px) + 8px) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
-  background: var(--bg); border: 0; border-bottom: 1px solid var(--line); cursor: pointer;
+/* Mobile : l'aperçu reste collé en haut et rétrécit jusqu'à 50 % pendant le défilement */
+@media (max-width: 899px) {
+  .stage { position: sticky; z-index: 10; background: var(--bg); padding-bottom: 10px; }
+  .stage.stuck { box-shadow: 0 1px 0 var(--line), 0 12px 24px rgba(0, 0, 0, .35); }
+  .frame { transform-origin: 50% 100%; will-change: transform; }
 }
-.mini {
-  transform: translateY(-100%); opacity: 0; pointer-events: none;
-  transition: transform .32s cubic-bezier(.2, .8, .2, 1), opacity .22s ease;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0);
-}
-.mini.on { transform: none; opacity: 1; pointer-events: auto; box-shadow: 0 10px 24px rgba(0, 0, 0, .35); }
-.mini canvas {
-  display: block; border-radius: 3px; box-shadow: 0 0 0 1px var(--line);
-  transform: scale(.9); transform-origin: top center;
-  transition: transform .32s cubic-bezier(.2, .8, .2, 1);
-}
-.mini.on canvas { transform: none; }
-.frame canvas { transition: opacity .25s ease; }
-.frame.away canvas { opacity: .55; }
-@media (prefers-reduced-motion: reduce) { .mini, .mini canvas, .frame canvas { transition: none; } }
-@media (min-width: 900px) { .mini { display: none !important; } }
+.meta { display: grid; justify-items: center; gap: 4px; padding: 4px 0 8px; }
 .hint { margin: 0; color: var(--muted); font-size: 13px; text-align: center; max-width: 42ch; }
 
 .panel {

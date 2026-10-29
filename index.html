@@ -25,20 +25,18 @@
   <button type="button" class="btn primary export" id="exportBtn">Exporter</button>
 </header>
 
-<button type="button" class="mini" id="mini" tabindex="-1" aria-hidden="true" aria-label="Revenir à l'aperçu en grand">
-  <canvas id="miniCanvas"></canvas>
-</button>
-
 <main class="layout">
   <section class="stage" aria-label="Aperçu">
     <div class="frame" id="frame">
       <canvas id="canvas" width="1080" height="1350"></canvas>
     </div>
-    <label class="check ig" id="igToggle" hidden><input type="checkbox" id="igPreview" checked> Afficher l'interface Instagram</label>
-    <p class="hint" id="hint">Glisse sur la photo pour la cadrer, pince pour zoomer. Touche un texte pour le modifier.</p>
   </section>
 
   <aside class="panel">
+    <div class="meta">
+      <label class="check ig" id="igToggle" hidden><input type="checkbox" id="igPreview" checked> Afficher l'interface Instagram</label>
+      <p class="hint" id="hint">Glisse sur la photo pour la cadrer, pince pour zoomer. Touche un texte pour le modifier.</p>
+    </div>
     <section class="block">
       <h2>Template</h2>
       <div class="templates" id="templates" role="listbox" aria-label="Templates"></div>

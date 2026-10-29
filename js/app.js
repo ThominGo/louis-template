@@ -156,51 +156,39 @@ function loop() {
   if (dirty || (v instanceof HTMLVideoElement && !v.paused)) {
     draw();
     dirty = false;
-    if (miniOn) copyMini();
   }
   requestAnimationFrame(loop);
 }
 
-// ---------- Aperçu réduit (50 %) quand l'aperçu principal sort de l'écran ----------
+// ---------- Mobile : l'aperçu colle en haut et rétrécit en continu jusqu'à 50 % ----------
 
-const mini = $('mini');
-const miniCanvas = $('miniCanvas');
-const miniCtx = miniCanvas.getContext('2d');
-let miniOn = false;
-function sizeMini() {
-  const w = frame.getBoundingClientRect().width / 2;
-  const h = w * canvas.height / canvas.width;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  miniCanvas.style.width = w + 'px';
-  miniCanvas.style.height = h + 'px';
-  miniCanvas.width = Math.round(w * dpr);
-  miniCanvas.height = Math.round(h * dpr);
-  document.documentElement.style.scrollPaddingTop = (miniOn ? mini.offsetHeight : 0) + 12 + 'px';
+const stage = document.querySelector('.stage');
+const desktop = window.matchMedia('(min-width: 900px)');
+const MIN_SCALE = 0.5;
+let geo = null;
+function measureStage() {
+  frame.style.transform = '';
+  if (desktop.matches) { stage.style.top = ''; geo = null; return; }
+  const cs = getComputedStyle(stage);
+  const pt = parseFloat(cs.paddingTop), pb = parseFloat(cs.paddingBottom);
+  const fh = frame.offsetHeight;
+  const visible = fh * MIN_SCALE + pb + 8;            // bande qui reste visible une fois collé
+  stage.style.top = -(stage.offsetHeight - visible) + 'px';
+  geo = { pt, fh, top0: document.querySelector('.bar').offsetHeight };
+  document.documentElement.style.scrollPaddingTop = visible + 12 + 'px';
+  updateStage();
 }
-function copyMini() {
-  miniCtx.imageSmoothingQuality = 'high';
-  miniCtx.drawImage(canvas, 0, 0, miniCanvas.width, miniCanvas.height);
+function updateStage() {
+  if (!geo) return;
+  const cutNow = Math.max(0, window.scrollY - geo.top0);
+  const k = Math.min(1, Math.max(MIN_SCALE, (geo.pt + geo.fh - Math.max(cutNow + 8, geo.pt)) / geo.fh));
+  frame.style.transform = k < 0.999 ? `scale(${k})` : '';
+  stage.classList.toggle('stuck', k < 0.999);
 }
-function setMini(on) {
-  const want = on && !window.matchMedia('(min-width: 900px)').matches;
-  if (want === miniOn) return;
-  miniOn = want;
-  if (want) { sizeMini(); copyMini(); }
-  mini.classList.toggle('on', want);
-  mini.setAttribute('aria-hidden', String(!want));
-  mini.tabIndex = want ? 0 : -1;
-  frame.classList.toggle('away', want);
-  sizeMini();
-}
-new IntersectionObserver((entries) => {
-  const e = entries[entries.length - 1];
-  // l'aperçu réduit apparaît dès que moins d'un quart du grand aperçu reste visible
-  const r = e.intersectionRatio;
-  if (!miniOn && r < 0.3) setMini(true);
-  else if (miniOn && r > 0.45) setMini(false);
-}, { threshold: [0, 0.1, 0.2, 0.3, 0.45, 0.6] }).observe(frame);
-window.addEventListener('resize', () => { sizeMini(); if (miniOn) copyMini(); });
-mini.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+let stageRaf = 0;
+window.addEventListener('scroll', () => { cancelAnimationFrame(stageRaf); stageRaf = requestAnimationFrame(updateStage); }, { passive: true });
+window.addEventListener('resize', measureStage);
+desktop.addEventListener?.('change', measureStage);
 
 // Vignettes des templates
 const thumbCanvas = document.createElement('canvas');
@@ -308,7 +296,7 @@ function setFormat(f) {
   state.format = f;
   document.querySelectorAll('[data-format]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.format === f)));
   sizeCanvas();
-  setTimeout(() => { if (miniOn) { sizeMini(); copyMini(); } }, 260);
+  setTimeout(measureStage, 260);
   $('igToggle').hidden = f !== 'story';
   updateMediaUI();
   dirty = true; save(); thumbsLater();
@@ -420,7 +408,7 @@ function endPointer(e) {
   if (!h) return;
   if (h.type === 'field') {
     const input = $('f-' + h.key);
-    if (input) { input.focus({ preventScroll: true }); input.scrollIntoView({ block: miniOn ? 'end' : 'center', behavior: 'smooth' }); }
+    if (input) { input.focus({ preventScroll: true }); input.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
   } else if (h.type === 'media' && !state.media.el) {
     $('fileInput').click();
   }
