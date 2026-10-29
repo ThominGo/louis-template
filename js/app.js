@@ -185,15 +185,20 @@ function setMini(on) {
   const want = on && !window.matchMedia('(min-width: 900px)').matches;
   if (want === miniOn) return;
   miniOn = want;
-  mini.hidden = !want;
+  if (want) { sizeMini(); copyMini(); }
+  mini.classList.toggle('on', want);
+  mini.setAttribute('aria-hidden', String(!want));
+  mini.tabIndex = want ? 0 : -1;
+  frame.classList.toggle('away', want);
   sizeMini();
-  if (want) copyMini();
 }
 new IntersectionObserver((entries) => {
   const e = entries[entries.length - 1];
   // l'aperçu réduit apparaît dès que moins d'un quart du grand aperçu reste visible
-  setMini(e.intersectionRatio < 0.25);
-}, { threshold: [0, 0.25, 0.5] }).observe(frame);
+  const r = e.intersectionRatio;
+  if (!miniOn && r < 0.3) setMini(true);
+  else if (miniOn && r > 0.45) setMini(false);
+}, { threshold: [0, 0.1, 0.2, 0.3, 0.45, 0.6] }).observe(frame);
 window.addEventListener('resize', () => { sizeMini(); if (miniOn) copyMini(); });
 mini.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
