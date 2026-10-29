@@ -166,7 +166,6 @@ function loop() {
 const mini = $('mini');
 const miniCanvas = $('miniCanvas');
 const miniCtx = miniCanvas.getContext('2d');
-const bar = document.querySelector('.bar');
 let miniOn = false;
 function sizeMini() {
   const w = frame.getBoundingClientRect().width / 2;
@@ -176,8 +175,7 @@ function sizeMini() {
   miniCanvas.style.height = h + 'px';
   miniCanvas.width = Math.round(w * dpr);
   miniCanvas.height = Math.round(h * dpr);
-  document.documentElement.style.setProperty('--bar-h', bar.offsetHeight + 'px');
-  document.documentElement.style.scrollPaddingTop = (miniOn ? bar.offsetHeight + mini.offsetHeight : bar.offsetHeight) + 12 + 'px';
+  document.documentElement.style.scrollPaddingTop = (miniOn ? mini.offsetHeight : 0) + 12 + 'px';
 }
 function copyMini() {
   miniCtx.imageSmoothingQuality = 'high';
@@ -195,7 +193,7 @@ new IntersectionObserver((entries) => {
   const e = entries[entries.length - 1];
   // l'aperçu réduit apparaît dès que moins d'un quart du grand aperçu reste visible
   setMini(e.intersectionRatio < 0.25);
-}, { threshold: [0, 0.25, 0.5], rootMargin: '-64px 0px 0px 0px' }).observe(frame);
+}, { threshold: [0, 0.25, 0.5] }).observe(frame);
 window.addEventListener('resize', () => { sizeMini(); if (miniOn) copyMini(); });
 mini.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 

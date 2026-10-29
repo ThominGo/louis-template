@@ -1,5 +1,5 @@
 // Garde l'app disponible hors connexion. Change VERSION à chaque mise à jour.
-const VERSION = 'studio-lt-5';
+const VERSION = 'studio-lt-6';
 const FILES = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/templates.js', 'js/insta.js', 'js/vendor/mediabunny.min.mjs',
   'fonts/GeneralSans-Variable.ttf', 'samples/vibraphone.jpg',
