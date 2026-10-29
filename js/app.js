@@ -156,9 +156,48 @@ function loop() {
   if (dirty || (v instanceof HTMLVideoElement && !v.paused)) {
     draw();
     dirty = false;
+    if (miniOn) copyMini();
   }
   requestAnimationFrame(loop);
 }
+
+// ---------- Aperçu réduit (50 %) quand l'aperçu principal sort de l'écran ----------
+
+const mini = $('mini');
+const miniCanvas = $('miniCanvas');
+const miniCtx = miniCanvas.getContext('2d');
+const bar = document.querySelector('.bar');
+let miniOn = false;
+function sizeMini() {
+  const w = frame.getBoundingClientRect().width / 2;
+  const h = w * canvas.height / canvas.width;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  miniCanvas.style.width = w + 'px';
+  miniCanvas.style.height = h + 'px';
+  miniCanvas.width = Math.round(w * dpr);
+  miniCanvas.height = Math.round(h * dpr);
+  document.documentElement.style.setProperty('--bar-h', bar.offsetHeight + 'px');
+  document.documentElement.style.scrollPaddingTop = (miniOn ? bar.offsetHeight + mini.offsetHeight : bar.offsetHeight) + 12 + 'px';
+}
+function copyMini() {
+  miniCtx.imageSmoothingQuality = 'high';
+  miniCtx.drawImage(canvas, 0, 0, miniCanvas.width, miniCanvas.height);
+}
+function setMini(on) {
+  const want = on && !window.matchMedia('(min-width: 900px)').matches;
+  if (want === miniOn) return;
+  miniOn = want;
+  mini.hidden = !want;
+  sizeMini();
+  if (want) copyMini();
+}
+new IntersectionObserver((entries) => {
+  const e = entries[entries.length - 1];
+  // l'aperçu réduit apparaît dès que moins d'un quart du grand aperçu reste visible
+  setMini(e.intersectionRatio < 0.25);
+}, { threshold: [0, 0.25, 0.5], rootMargin: '-64px 0px 0px 0px' }).observe(frame);
+window.addEventListener('resize', () => { sizeMini(); if (miniOn) copyMini(); });
+mini.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
 // Vignettes des templates
 const thumbCanvas = document.createElement('canvas');
@@ -266,6 +305,7 @@ function setFormat(f) {
   state.format = f;
   document.querySelectorAll('[data-format]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.format === f)));
   sizeCanvas();
+  setTimeout(() => { if (miniOn) { sizeMini(); copyMini(); } }, 260);
   $('igToggle').hidden = f !== 'story';
   updateMediaUI();
   dirty = true; save(); thumbsLater();
@@ -377,7 +417,7 @@ function endPointer(e) {
   if (!h) return;
   if (h.type === 'field') {
     const input = $('f-' + h.key);
-    if (input) { input.focus({ preventScroll: true }); input.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    if (input) { input.focus({ preventScroll: true }); input.scrollIntoView({ block: miniOn ? 'end' : 'center', behavior: 'smooth' }); }
   } else if (h.type === 'media' && !state.media.el) {
     $('fileInput').click();
   }

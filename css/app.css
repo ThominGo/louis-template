@@ -77,6 +77,15 @@ button, input, textarea { font: inherit; color: inherit; }
 .frame.story { width: min(100%, calc(56vh * 1080 / 1920)); aspect-ratio: 1080 / 1920; }
 .frame canvas { display: block; width: 100%; height: 100%; }
 .check.ig { font-size: 14px; color: var(--muted); min-height: 28px; }
+/* Aperçu réduit qui reste visible quand on descend dans les réglages (mobile) */
+.mini {
+  position: fixed; left: 0; right: 0; top: var(--bar-h, 64px); z-index: 15;
+  display: flex; justify-content: center;
+  padding: 8px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px));
+  background: var(--bg); border: 0; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.mini canvas { display: block; border-radius: 3px; box-shadow: 0 0 0 1px var(--line); }
+@media (min-width: 900px) { .mini { display: none !important; } }
 .hint { margin: 0; color: var(--muted); font-size: 13px; text-align: center; max-width: 42ch; }
 
 .panel {
