@@ -1,4 +1,5 @@
 import { TEMPLATES, SAMPLES, HEIGHT, W, FAMILY, render } from './templates.js';
+import { drawInstaStory } from './insta.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('canvas');
@@ -17,7 +18,9 @@ const state = {
   format: 'post',
   data: { ...SAMPLES['texte-image'], description: SAMPLES['texte-desc'].description, ronds: true },
   fx: {},          // effets propres à chaque template
-  media: { el: null, type: null, ox: 0, oy: 0, zoom: 1, sample: false },
+  media: { el: null, type: null, sample: false },
+  crops: {},       // cadrage du média propre à chaque template et format
+  igPreview: true, // interface Instagram par-dessus les stories
 };
 
 function load() {
@@ -28,6 +31,8 @@ function load() {
       if (s.format in HEIGHT) state.format = s.format;
       Object.assign(state.data, s.data || {});
       state.fx = s.fx || {};
+      state.crops = s.crops || {};
+      if (typeof s.igPreview === 'boolean') state.igPreview = s.igPreview;
     }
   } catch (e) { /* stockage indisponible : on garde les valeurs d'exemple */ }
 }
@@ -35,7 +40,7 @@ let saveTimer = 0;
 function save() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ tpl: state.tpl, format: state.format, data: state.data, fx: state.fx })); } catch (e) {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ tpl: state.tpl, format: state.format, data: state.data, fx: state.fx, crops: state.crops, igPreview: state.igPreview })); } catch (e) {}
   }, 300);
 }
 
@@ -54,6 +59,12 @@ function fxRender(f) {
     reach: f.reach,
     contrast: f.mode !== 'none' ? f.contrast : 0,
   };
+}
+
+function cropFor(id = state.tpl, format = state.format) {
+  const k = id + ':' + format;
+  if (!state.crops[k]) state.crops[k] = { ox: 0, oy: 0, zoom: 1 };
+  return state.crops[k];
 }
 
 // ---------- Média : stockage local du dernier fichier ----------
@@ -91,7 +102,8 @@ function setMedia(blob, { sample = false, persist = true } = {}) {
     const old = state.media.el;
     if (old instanceof HTMLVideoElement) { old.pause(); old.removeAttribute('src'); old.load(); }
     const done = (el) => {
-      Object.assign(state.media, { el, blob, type: isVideo ? 'video' : 'image', ox: 0, oy: 0, zoom: 1, sample });
+      Object.assign(state.media, { el, blob, type: isVideo ? 'video' : 'image', sample });
+      if (persist) state.crops = {};
       $('zoom').value = 1;
       updateMediaUI();
       dirty = true; thumbsLater();
@@ -125,7 +137,10 @@ function draw(target = ctx, editing = true) {
   env.fx = fxRender(fxFor(t.id));
   env.editing = editing;
   env.light = ['texte-image', 'texte-image-desc', 'texte-video'].includes(t.id);
+  env.crop = cropFor(t.id);
   render(target, t, state.format, { ...state.data, ronds: state.data.ronds && !!t.ronds }, env);
+  // aperçu uniquement : jamais dans les fichiers exportés
+  if (editing && target === ctx && state.format === 'story' && state.igPreview) drawInstaStory(target, W, HEIGHT.story);
 }
 
 function sizeCanvas() {
@@ -161,6 +176,7 @@ function drawThumbs() {
     tmpEnv.fx = fxRender(fxFor(t.id));
     tmpEnv.light = ['texte-image', 'texte-image-desc', 'texte-video'].includes(t.id);
     tmpEnv.editing = false;
+    tmpEnv.crop = cropFor(t.id);
     render(thumbCtx, t, state.format, { ...state.data, ronds: state.data.ronds && !!t.ronds }, tmpEnv);
     const cx = c.getContext('2d');
     cx.imageSmoothingQuality = 'high';
@@ -221,7 +237,8 @@ function updateMediaUI() {
     $('playBtn').textContent = state.media.el.paused ? 'Lecture' : 'Pause';
     $('muteBtn').textContent = state.media.el.muted ? 'Son : coupé' : 'Son : activé';
   }
-  $('zoomVal').textContent = Math.round((state.media.zoom || 1) * 100) + ' %';
+  $('zoom').value = cropFor().zoom || 1;
+  $('zoomVal').textContent = Math.round((cropFor().zoom || 1) * 100) + ' %';
   const f = fxFor(t.id);
   document.querySelectorAll('#fxSeg button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.fx === f.mode)));
   $('orangeRange').hidden = f.mode !== 'bwOrange';
@@ -245,6 +262,8 @@ function setFormat(f) {
   state.format = f;
   document.querySelectorAll('[data-format]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.format === f)));
   sizeCanvas();
+  $('igToggle').hidden = f !== 'story';
+  updateMediaUI();
   dirty = true; save(); thumbsLater();
 }
 
@@ -255,9 +274,11 @@ document.querySelectorAll('#fxSeg button').forEach(b => b.addEventListener('clic
 [['orange', 'orange'], ['reach', 'reach'], ['contrast', 'contrast']].forEach(([id, k]) => {
   $(id).addEventListener('input', (e) => { fxFor(state.tpl)[k] = +e.target.value; updateMediaUI(); dirty = true; save(); thumbsLater(); });
 });
+$('igPreview').checked = state.igPreview;
+$('igPreview').addEventListener('change', (e) => { state.igPreview = e.target.checked; dirty = true; save(); });
 $('ronds').addEventListener('change', (e) => { state.data.ronds = e.target.checked; dirty = true; save(); thumbsLater(); });
-$('zoom').addEventListener('input', (e) => { state.media.zoom = +e.target.value; updateMediaUI(); dirty = true; });
-$('recenter').addEventListener('click', () => { Object.assign(state.media, { ox: 0, oy: 0, zoom: 1 }); $('zoom').value = 1; updateMediaUI(); dirty = true; thumbsLater(); });
+$('zoom').addEventListener('input', (e) => { cropFor().zoom = +e.target.value; updateMediaUI(); dirty = true; save(); thumbsLater(); });
+$('recenter').addEventListener('click', () => { Object.assign(cropFor(), { ox: 0, oy: 0, zoom: 1 }); $('zoom').value = 1; updateMediaUI(); dirty = true; save(); thumbsLater(); });
 $('fileInput').addEventListener('change', async (e) => {
   const f = e.target.files[0];
   e.target.value = '';
@@ -304,7 +325,7 @@ function margins(h) {
   const el = state.media.el;
   if (!el) return [0, 0];
   const sw = el.videoWidth || el.naturalWidth, sh = el.videoHeight || el.naturalHeight;
-  const s = Math.max(h.w / sw, h.h / sh) * (state.media.zoom || 1);
+  const s = Math.max(h.w / sw, h.h / sh) * (cropFor().zoom || 1);
   return [(sw * s - h.w) / 2, (sh * s - h.h) / 2];
 }
 
@@ -314,10 +335,10 @@ canvas.addEventListener('pointerdown', (e) => {
   pointers.set(e.pointerId, p);
   if (pointers.size === 1) {
     const h = hitAt(p);
-    gesture = { start: p, hit: h, moved: false, ox: state.media.ox, oy: state.media.oy };
+    gesture = { start: p, hit: h, moved: false, ox: cropFor().ox, oy: cropFor().oy };
   } else if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
-    gesture = { pinch: Math.hypot(a.x - b.x, a.y - b.y), zoom: state.media.zoom, moved: true, hit: gesture?.hit };
+    gesture = { pinch: Math.hypot(a.x - b.x, a.y - b.y), zoom: cropFor().zoom, moved: true, hit: gesture?.hit };
   }
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -327,16 +348,16 @@ canvas.addEventListener('pointermove', (e) => {
   if (gesture.pinch && pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
-    state.media.zoom = Math.max(1, Math.min(4, gesture.zoom * d / gesture.pinch));
-    $('zoom').value = state.media.zoom; updateMediaUI(); dirty = true;
+    cropFor().zoom = Math.max(1, Math.min(4, gesture.zoom * d / gesture.pinch));
+    $('zoom').value = cropFor().zoom; updateMediaUI(); dirty = true;
     return;
   }
   const dx = p.x - gesture.start.x, dy = p.y - gesture.start.y;
   if (Math.hypot(dx, dy) > 12) gesture.moved = true;
   if (gesture.moved && gesture.hit?.type === 'media' && state.media.el) {
     const [mx, my] = margins(gesture.hit);
-    state.media.ox = mx > 0 ? Math.max(-1, Math.min(1, gesture.ox + dx / mx)) : 0;
-    state.media.oy = my > 0 ? Math.max(-1, Math.min(1, gesture.oy + dy / my)) : 0;
+    cropFor().ox = mx > 0 ? Math.max(-1, Math.min(1, gesture.ox + dx / mx)) : 0;
+    cropFor().oy = my > 0 ? Math.max(-1, Math.min(1, gesture.oy + dy / my)) : 0;
     dirty = true;
   }
 });
@@ -346,7 +367,7 @@ function endPointer(e) {
   if (pointers.size > 0) return;
   const g = gesture; gesture = null;
   if (!g) return;
-  if (g.moved) { thumbsLater(); return; }
+  if (g.moved) { save(); thumbsLater(); return; }
   const h = g.hit;
   if (!h) return;
   if (h.type === 'field') {
@@ -361,8 +382,9 @@ canvas.addEventListener('pointercancel', endPointer);
 canvas.addEventListener('wheel', (e) => {
   if (!state.media.el) return;
   e.preventDefault();
-  state.media.zoom = Math.max(1, Math.min(4, state.media.zoom * (e.deltaY < 0 ? 1.06 : 0.94)));
-  $('zoom').value = state.media.zoom; updateMediaUI(); dirty = true;
+  const c = cropFor();
+  c.zoom = Math.max(1, Math.min(4, c.zoom * (e.deltaY < 0 ? 1.06 : 0.94)));
+  $('zoom').value = c.zoom; save(); updateMediaUI(); dirty = true;
 }, { passive: false });
 
 // ---------- Export ----------

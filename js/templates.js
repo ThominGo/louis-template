@@ -101,13 +101,14 @@ export function drawMedia(ctx, r, env) {
     ctx.restore();
     return;
   }
-  const z = media.zoom || 1;
+  const crop = env.crop || { ox: 0, oy: 0, zoom: 1 };
+  const z = crop.zoom || 1;
   const s = Math.max(r.w / sw, r.h / sh) * z;
   const dw = sw * s, dh = sh * s;
   // décalage normalisé (-1 à 1) limité pour ne jamais laisser de vide
   const mx = (dw - r.w) / 2, my = (dh - r.h) / 2;
-  const ox = Math.max(-1, Math.min(1, media.ox || 0)) * mx;
-  const oy = Math.max(-1, Math.min(1, media.oy || 0)) * my;
+  const ox = Math.max(-1, Math.min(1, crop.ox || 0)) * mx;
+  const oy = Math.max(-1, Math.min(1, crop.oy || 0)) * my;
   ctx.drawImage(media.el, r.x + (r.w - dw) / 2 + ox, r.y + (r.h - dh) / 2 + oy, dw, dh);
 
   if (fx.bw) {
